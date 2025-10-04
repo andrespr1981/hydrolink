@@ -12,13 +12,14 @@ ScaffoldFeatureController<SnackBar, SnackBarClosedReason> showMessage(
       content: Stack(
         children: [
           Container(
-            padding: EdgeInsets.all(16),
-            height: 90,
+            padding: EdgeInsets.all(10),
+            height: 100,
             decoration: BoxDecoration(
               color: color,
               borderRadius: BorderRadius.all(Radius.circular(20)),
             ),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 ColorFiltered(
                   colorFilter: const ColorFilter.matrix([
@@ -40,15 +41,17 @@ ScaffoldFeatureController<SnackBar, SnackBarClosedReason> showMessage(
                       ),
                       Text(
                         message,
-                        style: TextStyle(fontSize: 15, color: Colors.white),
-                        maxLines: 2,
+                        style: TextStyle(fontSize: 14, color: Colors.white),
+                        maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
                 IconButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                  },
                   icon: Icon(Icons.close, color: Colors.white),
                 ),
               ],
