@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'utils/themes.dart';
-import 'screens/home_page.dart';
+import 'utils/appnavigator.dart';
 
 void main() {
   runApp(const MyApp());
@@ -17,7 +17,7 @@ class MyApp extends StatelessWidget {
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: ThemeMode.system,
-      home: const HomePage(),
+      home: const AppNavigator(),
     );
   }
 }

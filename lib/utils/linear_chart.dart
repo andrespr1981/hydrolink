@@ -1,21 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 
-class LinearChartWidget extends StatelessWidget {
+class GraphicWidget extends StatelessWidget {
+  final double minX;
+  final double maxX;
+  final double minY;
+  final double maxY;
+  final List<FlSpot> pointsList;
+
   static const List<Color> gradientColors = [
-    Colors.blueAccent,
+    Color.fromARGB(255, 230, 238, 252),
     Color(0xff02d39a),
   ];
 
-  const LinearChartWidget({super.key});
+  const GraphicWidget({
+    super.key,
+    required this.minX,
+    required this.maxX,
+    required this.minY,
+    required this.maxY,
+    required this.pointsList,
+  });
 
   @override
   Widget build(BuildContext content) => LineChart(
     LineChartData(
-      minX: 1,
-      maxX: 7,
-      minY: 1,
-      maxY: 14,
+      minX: minX,
+      maxX: maxX,
+      minY: minY,
+      maxY: maxY,
       gridData: FlGridData(
         show: true,
         getDrawingHorizontalLine: (value) {
@@ -29,15 +42,7 @@ class LinearChartWidget extends StatelessWidget {
       borderData: FlBorderData(show: true, border: Border.all()),
       lineBarsData: [
         LineChartBarData(
-          spots: [
-            FlSpot(1, 8),
-            FlSpot(2, 6),
-            FlSpot(3, 4),
-            FlSpot(4, 5),
-            FlSpot(5, 5),
-            FlSpot(6, 9),
-            FlSpot(7, 10),
-          ],
+          spots: pointsList,
           isCurved: true,
           gradient: LinearGradient(colors: gradientColors),
           belowBarData: BarAreaData(
@@ -46,6 +51,48 @@ class LinearChartWidget extends StatelessWidget {
           ),
         ),
       ],
+    ),
+  );
+}
+
+class ScalesWidget extends StatelessWidget {
+  final List<FlSpot> pointsList;
+  final List<Color> colors;
+  const ScalesWidget({
+    super.key,
+    required this.colors,
+    required this.pointsList,
+  });
+
+  @override
+  Widget build(BuildContext content) => Container(
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        colors: colors,
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+      ),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: LineChart(
+      LineChartData(
+        minX: 1,
+        maxX: 14,
+        minY: 0,
+        maxY: 1,
+        gridData: FlGridData(show: false),
+        titlesData: FlTitlesData(
+          show: false,
+          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: false),
+        lineBarsData: [
+          LineChartBarData(spots: pointsList, color: Colors.white),
+        ],
+      ),
     ),
   );
 }
