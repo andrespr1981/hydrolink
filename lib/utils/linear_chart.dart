@@ -77,7 +77,7 @@ class ScalesWidget extends StatelessWidget {
     child: LineChart(
       LineChartData(
         minX: 1,
-        maxX: 14,
+        maxX: 10,
         minY: 0,
         maxY: 1,
         gridData: FlGridData(show: false),

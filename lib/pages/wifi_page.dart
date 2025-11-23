@@ -128,7 +128,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   Container(
-                    height: size.height * 0.20,
+                    height: size.height * 0.25,
                     width: size.width * 0.45,
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -329,6 +329,7 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
               ),
+              SizedBox(height: 100),
             ],
           ),
         ),
