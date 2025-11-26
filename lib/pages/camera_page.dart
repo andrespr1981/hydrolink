@@ -184,7 +184,7 @@ class _CameraPageState extends State<CameraPage> {
                         children: [
                           ValueListenableBuilder<bool>(
                             valueListenable: flashOn,
-                            builder: (_, isOn, __) {
+                            builder: (_, isOn, _) {
                               return SwitchColorBtn(
                                 textTrue: 'Apagar Flash',
                                 textFalse: 'Encender Flash',

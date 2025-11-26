@@ -41,7 +41,7 @@ class _AppNavigatorState extends State<AppNavigator> {
                 borderRadius: BorderRadius.circular(30),
                 child: BottomNavigationBar(
                   currentIndex: myCurrentIndex,
-                  backgroundColor: Colors.white.withOpacity(0.95),
+                  backgroundColor: Colors.white.withValues(alpha: 1),
                   selectedItemColor: Colors.green,
                   unselectedItemColor: Colors.black,
                   type: BottomNavigationBarType.fixed,
