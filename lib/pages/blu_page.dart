@@ -340,8 +340,8 @@ class _BluPageState extends State<BluPage> {
                                 } else {
                                   showErrorMesage(
                                     context,
-                                    'Alerta',
-                                    'Debes de elegir ',
+                                    'Ups...',
+                                    'Por favor, ingresa un tiempo de riego mayor a cero.',
                                   );
                                 }
                               },
@@ -722,7 +722,7 @@ class _BluPageState extends State<BluPage> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
-                      'Fechas de regado',
+                      'FECHAS DE REGADO',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     TableCalendar(

@@ -1,9 +1,12 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:hydrolink/utils/color_btn.dart';
+import 'package:hydrolink/utils/fan_progress_indicator.dart';
+import 'package:hydrolink/utils/pop_up_message.dart';
 import 'package:hydrolink/utils/switch_color_btn.dart';
 import 'package:hydrolink/utils/tiles.dart';
 import 'package:liquid_progress_indicator_v2/liquid_progress_indicator.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 import '../utils/linear_chart.dart';
 
@@ -21,8 +24,29 @@ class _HomePageState extends State<HomePage> {
   bool waterOn = false;
   double waterRemaining = 0;
 
+  late String humidity = '0';
+
+  final List<String> days = [
+    'Lunes',
+    'Martes',
+    'Miercoles',
+    'Jueves',
+    'Viernes',
+    'Sabado',
+    'Domingo',
+  ];
+
+  List<bool> waterDays = [false, false, false, false, false, false, false];
+
   late int waterMinutes = 0;
   late int waterSeconds = 0;
+
+  late int fanMinutes = 0;
+  late int fanSeconds = 0;
+  bool fanOn = false;
+
+  final mqtt = MqttService();
+  static String topic = 'hydrolink/entry';
 
   @override
   void initState() {
@@ -129,12 +153,16 @@ class _HomePageState extends State<HomePage> {
                     ),
                     ElevatedButton(
                       child: Text("Enviar mensaje"),
-                      onPressed: () {},
+                      onPressed: () {
+                        mqtt.publish(topic, "0");
+                      },
                     ),
 
                     ElevatedButton(
                       child: Text("Suscribirse"),
-                      onPressed: () {},
+                      onPressed: () {
+                        mqtt.connect();
+                      },
                     ),
                   ],
                 ),
@@ -208,15 +236,13 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                     SizedBox(height: 10),
-                    SizedBox(
-                      height: 200,
-                      child: changeGraphic(graphicSelected),
-                    ),
+                    changeGraphic(graphicSelected),
                   ],
                 ),
               ),
               SizedBox(height: 20),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
                     height: size.height * 0.37,
@@ -322,14 +348,139 @@ class _HomePageState extends State<HomePage> {
                           ],
                           state: waterOn,
                           onTap: () {
-                            if (!waterOn) {
+                            if (waterMinutes > 0 || waterSeconds > 0) {
+                              if (!waterOn) {
+                                setState(() {
+                                  waterOn = true;
+                                });
+                                mqtt.publishJson(topic, {
+                                  "waterPump":
+                                      (60 / waterMinutes) + waterSeconds,
+                                });
+                              } else {
+                                setState(() {
+                                  waterOn = false;
+                                });
+                                mqtt.publishJson(topic, {"waterPump": false});
+                              }
+                            } else {
+                              showErrorMesage(
+                                context,
+                                'Ups...',
+                                'Por favor, ingresa un tiempo de riego mayor a cero.',
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    height: size.height * 0.37,
+                    width: size.width * 0.45,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      borderRadius: BorderRadius.all(Radius.circular(20)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withValues(),
+                          spreadRadius: 1,
+                          blurRadius: 10,
+                          offset: Offset(10, 5),
+                        ),
+                        BoxShadow(
+                          color: Colors.white.withValues(),
+                          blurRadius: 50,
+                          offset: Offset(-1, -1),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('TEMPERATURA'),
+                        fanOn
+                            ? FanProgressIndicator(progress: 1)
+                            : Image.asset('assets/fan.png', height: 100),
+                        SizedBox(height: 10),
+                        ColorBtn(
+                          text:
+                              'Tiempo de ventilación: $fanMinutes:${fanSeconds < 10 ? '0$fanSeconds' : fanSeconds}${fanMinutes < 1 ? ' seg' : ' min'}',
+                          colors: const [Colors.lightGreen, Colors.green],
+                          onTap: () {},
+                          height: 60,
+                          width: 170,
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              height: 70,
+                              width: 50,
+                              child: ListWheelScrollView.useDelegate(
+                                onSelectedItemChanged: (value) {
+                                  setState(() {
+                                    fanMinutes = (value % 6);
+                                  });
+                                },
+                                itemExtent: 30,
+                                perspective: 0.01,
+                                diameterRatio: 3,
+                                childDelegate: ListWheelChildBuilderDelegate(
+                                  childCount: 50,
+                                  builder: (context, index) {
+                                    final minute = index % 6;
+                                    return Minutes(mins: minute);
+                                  },
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              height: 70,
+                              width: 50,
+                              child: ListWheelScrollView.useDelegate(
+                                itemExtent: 30,
+                                onSelectedItemChanged: (value) {
+                                  setState(() {
+                                    fanSeconds = value % 61;
+                                  });
+                                },
+                                perspective: 0.01,
+                                diameterRatio: 3,
+                                childDelegate: ListWheelChildBuilderDelegate(
+                                  childCount: 183,
+                                  builder: (context, index) {
+                                    final second = index % 61;
+                                    return Seconds(seconds: second);
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 10),
+                        SwitchColorBtn(
+                          textTrue: 'Apagar ventiladores',
+                          textFalse: 'Encender ventilador',
+                          colorsTrue: const [Colors.red, Colors.orange],
+                          colorsFalse: const [
+                            Colors.blue,
+                            Colors.lightBlueAccent,
+                          ],
+                          state: fanOn,
+                          onTap: () {
+                            if (!fanOn) {
                               setState(() {
-                                waterOn = true;
+                                fanOn = true;
+                              });
+                              mqtt.publishJson(topic, {
+                                "fan": (60 / fanMinutes) + fanSeconds,
                               });
                             } else {
                               setState(() {
-                                waterOn = false;
+                                fanOn = false;
                               });
+                              mqtt.publishJson(topic, {"fan": false});
                             }
                           },
                         ),
@@ -337,6 +488,121 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                 ],
+              ),
+              SizedBox(height: 20),
+              Container(
+                height: size.height * 0.55,
+                width: size.width,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  borderRadius: BorderRadius.all(Radius.circular(20)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withValues(),
+                      spreadRadius: 1,
+                      blurRadius: 10,
+                      offset: Offset(10, 5),
+                    ),
+                    BoxShadow(
+                      color: Colors.white.withValues(),
+                      blurRadius: 50,
+                      offset: Offset(-1, -1),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(height: 5),
+                    Text(
+                      'FECHAS DE REGADO',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    TableCalendar(
+                      availableCalendarFormats: const {
+                        CalendarFormat.month: 'Mes',
+                        CalendarFormat.week: 'Semana',
+                      },
+                      calendarBuilders: CalendarBuilders(
+                        defaultBuilder: (context, day, focusedDay) {
+                          if (day.weekday == DateTime.monday && waterDays[0] ||
+                              day.weekday == DateTime.tuesday && waterDays[1] ||
+                              day.weekday == DateTime.wednesday &&
+                                  waterDays[2] ||
+                              day.weekday == DateTime.thursday &&
+                                  waterDays[3] ||
+                              day.weekday == DateTime.friday && waterDays[4] ||
+                              day.weekday == DateTime.saturday &&
+                                  waterDays[5] ||
+                              day.weekday == DateTime.sunday && waterDays[6]) {
+                            return Container(
+                              margin: const EdgeInsets.all(6.0),
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                borderRadius: BorderRadius.circular(20.0),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '${day.day}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+                          return null;
+                        },
+                      ),
+                      locale: 'es_ES',
+                      focusedDay: DateTime.now(),
+                      firstDay: DateTime.utc(2020, 1, 1),
+                      lastDay: DateTime.utc(2030, 12, 31),
+                      calendarFormat: CalendarFormat.month,
+                      daysOfWeekStyle: const DaysOfWeekStyle(
+                        weekdayStyle: TextStyle(fontSize: 10),
+                        weekendStyle: TextStyle(fontSize: 10),
+                      ),
+                      calendarStyle: const CalendarStyle(
+                        defaultTextStyle: TextStyle(fontSize: 10),
+                        weekendTextStyle: TextStyle(fontSize: 10),
+                        outsideTextStyle: TextStyle(
+                          fontSize: 8,
+                          color: Colors.grey,
+                        ),
+                        todayDecoration: BoxDecoration(
+                          color: Colors.blue,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      headerStyle: const HeaderStyle(
+                        formatButtonVisible: false,
+                        titleCentered: true,
+                        titleTextStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        leftChevronIcon: Icon(Icons.chevron_left, size: 18),
+                        rightChevronIcon: Icon(Icons.chevron_right, size: 18),
+                      ),
+                    ),
+                    SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ColorBtn(
+                          text: 'Cambiar Fechas de regado',
+                          colors: const [Colors.blue, Colors.lightBlueAccent],
+                          onTap: () {
+                            showDatePicker();
+                          },
+                          height: 60,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               SizedBox(height: 100),
             ],
@@ -346,16 +612,139 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget changeGraphic(int value) {
-    //ph lx humedad c
-    final List<double> maxY = [4000, 12000, 4000, 100];
+  void showDatePicker() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Selecciona días de riego"),
+          content: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setStateDialog) {
+              return SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(days.length, (index) {
+                    return CheckboxListTile(
+                      title: Text(days[index]),
+                      value: waterDays[index],
+                      onChanged: (value) {
+                        setStateDialog(() {
+                          setStateDialog(() {
+                            waterDays[index] = value!;
+                          });
+                        });
+                      },
+                    );
+                  }),
+                ),
+              );
+            },
+          ),
+          actions: [
+            ColorBtn(
+              text: 'Cancelar',
+              colors: const [Colors.blue, Colors.lightBlueAccent],
+              onTap: () {
+                Navigator.pop(context);
+              },
+              width: 120,
+            ),
+            ColorBtn(
+              text: 'Guardar',
+              colors: const [Colors.blue, Colors.lightBlueAccent],
+              onTap: () {
+                Navigator.pop(context);
+              },
+              width: 120,
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-    return GraphicWidget(
-      minX: 1,
-      maxX: 7,
-      minY: 0,
-      maxY: maxY[value],
-      pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
+  Widget changeGraphic(int value) {
+    if (value == 0) {
+      return relativeHumidity();
+    } else if (value == 1) {
+      return light();
+    } else if (value == 2) {
+      return dirtHumidity();
+    } else {
+      return temperature();
+    }
+  }
+
+  Widget relativeHumidity() {
+    return Column(
+      children: [
+        SizedBox(
+          height: 200,
+          child: GraphicWidget(
+            minX: 1,
+            maxX: 7,
+            minY: 0,
+            maxY: 4000,
+            pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
+          ),
+        ),
+        ColorBtn(
+          text: 'Humedad relativa: $humidity',
+          colors: const [Colors.lightGreen, Colors.green],
+          onTap: () {},
+        ),
+      ],
+    );
+  }
+
+  Widget light() {
+    return Column(
+      children: [
+        SizedBox(
+          height: 200,
+          child: GraphicWidget(
+            minX: 1,
+            maxX: 7,
+            minY: 0,
+            maxY: 12000,
+            pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget dirtHumidity() {
+    return Column(
+      children: [
+        SizedBox(
+          height: 200,
+          child: GraphicWidget(
+            minX: 1,
+            maxX: 7,
+            minY: 0,
+            maxY: 4000,
+            pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget temperature() {
+    return Column(
+      children: [
+        SizedBox(
+          height: 200,
+          child: GraphicWidget(
+            minX: 1,
+            maxX: 7,
+            minY: 0,
+            maxY: 100,
+            pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
+          ),
+        ),
+      ],
     );
   }
 }

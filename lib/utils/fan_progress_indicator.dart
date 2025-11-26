@@ -38,7 +38,7 @@ class _FanProgressIndicatorState extends State<FanProgressIndicator>
   Widget build(BuildContext context) {
     return RotationTransition(
       turns: _controller,
-      child: Image.asset('assets/fan.png', height: 50),
+      child: Image.asset('assets/fan.png', height: 100),
     );
   }
 
