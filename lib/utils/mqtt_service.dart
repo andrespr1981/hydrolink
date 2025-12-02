@@ -11,13 +11,17 @@ class MqttService {
   final String username = "emqx_online_test_1a611861";
   final String password = "031ff86Q?496T6bbP\$0e&2b61KG3b64e";
 
-  Future<void> connect() async {
+  static String topicEntry = 'hydrolink/entry';
+  static String topicData = 'hydrolink/data';
+
+  Function(String payload)? onMessage;
+
+  Future<bool> connect() async {
     client = MqttServerClient(broker, clientId);
     client.port = port;
     client.secure = true;
     client.logging(on: false);
 
-    // Usa el certificado raíz (igual al de tu ESP32)
     final context = SecurityContext.defaultContext;
     context.setTrustedCertificatesBytes(_caCertificate.codeUnits);
     client.securityContext = context;
@@ -28,32 +32,30 @@ class MqttService {
     final connMessage = MqttConnectMessage()
         .withClientIdentifier(clientId)
         .authenticateAs(username, password)
-        .startClean(); // nada más
+        .startClean();
 
     client.connectionMessage = connMessage;
 
     try {
-      print("🔌 Conectando al broker...");
       await client.connect();
-      print("✅ Conectado!");
+      if (client.connectionStatus!.state == MqttConnectionState.connected) {
+        client.subscribe(topicData, MqttQos.atLeastOnce);
+        client.updates.listen((messages) {
+          final recMess = messages[0].payload as MqttPublishMessage;
+          final payload = MqttUtilities.bytesToStringAsString(
+            recMess.payload.message!,
+          );
+
+          if (onMessage != null) {
+            onMessage!(payload);
+          }
+        });
+      }
+      return true;
     } catch (e) {
-      print("❌ Error conectando: $e");
       client.disconnect();
     }
-
-    if (client.connectionStatus!.state == MqttConnectionState.connected) {
-      print("⚡ Suscribiendo al tópico...");
-      client.subscribe("hydrolink/entry", MqttQos.atLeastOnce);
-
-      client.updates.listen((messages) {
-        final recMess = messages[0].payload as MqttPublishMessage;
-        final payload = MqttUtilities.bytesToStringAsString(
-          recMess.payload.message!,
-        );
-
-        print("📩 Mensaje recibido: $payload en ${messages[0].topic}");
-      });
-    }
+    return false;
   }
 
   void publish(String topic, String message) {
@@ -69,9 +71,7 @@ class MqttService {
     client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
   }
 
-  void onDisconnected() {
-    print("🔌 Desconectado del broker");
-  }
+  void onDisconnected() {}
 
   static const String _caCertificate = """
 -----BEGIN CERTIFICATE-----

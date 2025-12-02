@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:hydrolink/utils/color_btn.dart';
@@ -5,8 +8,11 @@ import 'package:hydrolink/utils/fan_progress_indicator.dart';
 import 'package:hydrolink/utils/pop_up_message.dart';
 import 'package:hydrolink/utils/switch_color_btn.dart';
 import 'package:hydrolink/utils/tiles.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:intl/intl.dart';
 import 'package:liquid_progress_indicator_v2/liquid_progress_indicator.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/linear_chart.dart';
 
@@ -19,12 +25,11 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
+//Me quede haciendo lo de que maneje los datos el mqtt
 class _HomePageState extends State<HomePage> {
   int graphicSelected = 0;
   bool waterOn = false;
   double waterRemaining = 0;
-
-  late String humidity = '0';
 
   final List<String> days = [
     'Lunes',
@@ -45,12 +50,96 @@ class _HomePageState extends State<HomePage> {
   late int fanSeconds = 0;
   bool fanOn = false;
 
+  late String humidity = '0';
+  late int minHumidity = 0;
+  late int minHumiditySend = 0;
+  late double humiditySpot = 5.5;
+  late String temperature = '0';
+  late double temperatureSpot = 5.5;
+  late int maxTemperature = 0;
+  late int maxTemperatureSend = 0;
+
+  late String light = '0';
+
+  late String dirtHumidity = '0';
+
   final mqtt = MqttService();
-  static String topic = 'hydrolink/entry';
+  static String topicEntry = 'hydrolink/entry';
 
   @override
   void initState() {
     super.initState();
+    initializeDateFormatting('es_ES', null);
+    connectMqtt();
+  }
+
+  void connectMqtt() async {
+    mqtt.onMessage = (payload) {
+      Map<String, dynamic> json = jsonDecode(payload);
+
+      if (mounted) {
+        setState(() {
+          if (json['humidity'] < 40) {
+            waterMinutes = 1;
+          } else if (json['humidity'] < 60) {
+            waterSeconds = 30;
+          } else {
+            waterMinutes = 2;
+          }
+
+          if (json['temperature'] > 30) {
+            temperatureSpot = 7.5;
+          } else if (json['temperature'] < 25 && json['temperature'] > 18) {
+            temperatureSpot = 5.5;
+          } else {
+            temperatureSpot = 2.5;
+          }
+
+          humidity = json['humidity'].toString();
+          humiditySpot = double.parse(humidity);
+          temperature = json['temperature'].toString();
+          dirtHumidity = json['dirt_humidity'].toString();
+          light = json['light'].toString();
+          minHumidity = json['minHumidity'];
+          maxTemperature = json['maxTemperature'];
+          waterDays = List<bool>.from(json['water_days']);
+        });
+      }
+    };
+    if (await mqtt.connect()) {
+      if (mounted) {
+        showSuccessMesage(
+          context,
+          '!Conectado!',
+          'Se conecto correcamente con el servicio',
+        );
+      }
+      mqtt.publishJson(topicEntry, {"online": true});
+    } else {
+      if (mounted) {
+        showErrorMesage(
+          context,
+          'Ups...',
+          'No se pudo conectar con el servicio.',
+        );
+      }
+    }
+  }
+
+  DateTime getNextWateringDate(List<bool> daysMondayFirst) {
+    DateTime now = DateTime.now();
+
+    // Dart: monday=1 → queremos monday=0
+    int todayIndex = now.weekday - 1;
+
+    for (int i = 0; i < 7; i++) {
+      int index = (todayIndex + i) % 7;
+      if (daysMondayFirst[index]) {
+        return now.add(Duration(days: i));
+      }
+    }
+
+    return now; // si no hay ningún día marcado
   }
 
   @override
@@ -69,7 +158,7 @@ class _HomePageState extends State<HomePage> {
           child: Column(
             children: [
               Container(
-                height: size.height * 0.40,
+                height: size.height * 0.27,
                 width: size.width,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -151,26 +240,13 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ],
                     ),
-                    ElevatedButton(
-                      child: Text("Enviar mensaje"),
-                      onPressed: () {
-                        mqtt.publish(topic, "0");
-                      },
-                    ),
-
-                    ElevatedButton(
-                      child: Text("Suscribirse"),
-                      onPressed: () {
-                        mqtt.connect();
-                      },
-                    ),
                   ],
                 ),
               ),
               SizedBox(height: 20),
               Container(
                 alignment: Alignment.topCenter,
-                height: size.height * 0.5,
+                height: size.height * 0.50,
                 width: size.width * 1,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -236,7 +312,7 @@ class _HomePageState extends State<HomePage> {
                       ],
                     ),
                     SizedBox(height: 10),
-                    changeGraphic(graphicSelected),
+                    changeWidget(graphicSelected, size),
                   ],
                 ),
               ),
@@ -245,7 +321,7 @@ class _HomePageState extends State<HomePage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    height: size.height * 0.37,
+                    height: size.height * 0.42,
                     width: size.width * 0.45,
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -353,21 +429,28 @@ class _HomePageState extends State<HomePage> {
                                 setState(() {
                                   waterOn = true;
                                 });
-                                mqtt.publishJson(topic, {
-                                  "waterPump":
-                                      (60 / waterMinutes) + waterSeconds,
+                                int time = (60 * waterMinutes) + waterSeconds;
+                                mqtt.publishJson(topicEntry, {
+                                  "waterPump": time,
+                                });
+                                Timer(Duration(seconds: time), () {
+                                  setState(() {
+                                    waterOn = false;
+                                  });
                                 });
                               } else {
                                 setState(() {
                                   waterOn = false;
                                 });
-                                mqtt.publishJson(topic, {"waterPump": false});
+                                mqtt.publishJson(topicEntry, {
+                                  "waterPump": false,
+                                });
                               }
                             } else {
                               showErrorMesage(
                                 context,
                                 'Ups...',
-                                'Por favor, ingresa un tiempo de riego mayor a cero.',
+                                'Ingresa un tiempo mayor a cero.',
                               );
                             }
                           },
@@ -376,7 +459,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   Container(
-                    height: size.height * 0.37,
+                    height: size.height * 0.42,
                     width: size.width * 0.45,
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -469,18 +552,30 @@ class _HomePageState extends State<HomePage> {
                           ],
                           state: fanOn,
                           onTap: () {
-                            if (!fanOn) {
-                              setState(() {
-                                fanOn = true;
-                              });
-                              mqtt.publishJson(topic, {
-                                "fan": (60 / fanMinutes) + fanSeconds,
-                              });
+                            if (fanMinutes > 0 || fanSeconds > 0) {
+                              if (!fanOn) {
+                                setState(() {
+                                  fanOn = true;
+                                });
+                                int time = (60 * fanMinutes) + fanSeconds;
+                                mqtt.publishJson(topicEntry, {"fan": time});
+                                Timer(Duration(seconds: time), () {
+                                  setState(() {
+                                    fanOn = false;
+                                  });
+                                });
+                              } else {
+                                setState(() {
+                                  fanOn = false;
+                                });
+                                mqtt.publishJson(topicEntry, {"fan": false});
+                              }
                             } else {
-                              setState(() {
-                                fanOn = false;
-                              });
-                              mqtt.publishJson(topic, {"fan": false});
+                              showErrorMesage(
+                                context,
+                                'Ups...',
+                                'Ingresa un tiempo mayor a cero.',
+                              );
                             }
                           },
                         ),
@@ -491,7 +586,7 @@ class _HomePageState extends State<HomePage> {
               ),
               SizedBox(height: 20),
               Container(
-                height: size.height * 0.55,
+                height: size.height * 0.57,
                 width: size.width,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -612,6 +707,25 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<List<FlSpot>> getGrapithData() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    DateTime now = DateTime.now();
+    var formatter = DateFormat('yyyy-MM-dd');
+    String formattedDate = formatter.format(now);
+
+    List<String> humidity = prefs.getStringList('humidity') ?? [];
+    List<String> light = prefs.getStringList('light') ?? [];
+    List<String> temperature = prefs.getStringList('temperature') ?? [];
+    List<String> dirtHumidity = prefs.getStringList('dirtHumidity') ?? [];
+
+    await prefs.setStringList('humidity', humidity);
+    await prefs.setStringList('light', light);
+    await prefs.setStringList('temperature', temperature);
+    await prefs.setStringList('dirtHumidity', dirtHumidity);
+    return [];
+  }
+
   void showDatePicker() {
     showDialog(
       context: context,
@@ -629,9 +743,7 @@ class _HomePageState extends State<HomePage> {
                       value: waterDays[index],
                       onChanged: (value) {
                         setStateDialog(() {
-                          setStateDialog(() {
-                            waterDays[index] = value!;
-                          });
+                          waterDays[index] = value!;
                         });
                       },
                     );
@@ -653,6 +765,8 @@ class _HomePageState extends State<HomePage> {
               text: 'Guardar',
               colors: const [Colors.blue, Colors.lightBlueAccent],
               onTap: () {
+                setState(() {});
+                mqtt.publishJson(topicEntry, {"waterDays": waterDays});
                 Navigator.pop(context);
               },
               width: 120,
@@ -663,19 +777,19 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget changeGraphic(int value) {
+  Widget changeWidget(int value, dynamic size) {
     if (value == 0) {
-      return relativeHumidity();
+      return relativeHumidityWidget(size);
     } else if (value == 1) {
-      return light();
+      return lightWidget(size);
     } else if (value == 2) {
-      return dirtHumidity();
+      return dirtHumidityWidget(size);
     } else {
-      return temperature();
+      return temperatureWidget(size);
     }
   }
 
-  Widget relativeHumidity() {
+  Widget relativeHumidityWidget(dynamic size) {
     return Column(
       children: [
         SizedBox(
@@ -688,16 +802,211 @@ class _HomePageState extends State<HomePage> {
             pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
           ),
         ),
-        ColorBtn(
-          text: 'Humedad relativa: $humidity',
-          colors: const [Colors.lightGreen, Colors.green],
-          onTap: () {},
+        SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Column(
+              children: [
+                ColorBtn(
+                  text: 'Humedad relativa: $humidity',
+                  colors: const [Colors.lightGreen, Colors.green],
+                  onTap: () {},
+                ),
+                SizedBox(height: 10),
+                SizedBox(
+                  height: 50,
+                  width: size.width * 0.40,
+                  child: ScalesWidget(
+                    colors: [
+                      Color(0xFFFF4500),
+                      Color.fromARGB(255, 255, 112, 60),
+                      Color(0xFF87CEFA),
+                      Color.fromARGB(255, 123, 204, 255),
+                      const Color.fromARGB(255, 56, 165, 255),
+                      Colors.blue,
+                    ],
+                    pointsList: [FlSpot(humiditySpot, 0.5)],
+                  ),
+                ),
+              ],
+            ),
+            Column(
+              children: [
+                ColorBtn(
+                  text: 'Humedad relativa minima: $minHumidity',
+                  colors: const [Colors.redAccent, Colors.red],
+                  onTap: () {},
+                ),
+                SizedBox(height: 10),
+                ColorBtn(
+                  text: 'Cambiar humedad relativa minima',
+                  colors: const [Colors.blue, Colors.lightBlueAccent],
+                  onTap: () {
+                    showMinHumidityPicker();
+                  },
+                ),
+              ],
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget light() {
+  void showMinHumidityPicker() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Seleciona el minimo de humedad relativa"),
+          content: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setStateDialog) {
+              return SingleChildScrollView(
+                child: Column(
+                  children: [
+                    Text(
+                      'Si la humedad relativa baja hasta ese punto, el riego se activará de forma automática.',
+                    ),
+                    SizedBox(height: 10),
+                    ColorBtn(
+                      text: minHumiditySend.toString(),
+                      colors: const [Colors.lightGreen, Colors.green],
+                      onTap: () {},
+                    ),
+                    SizedBox(
+                      height: 70,
+                      width: 50,
+                      child: ListWheelScrollView.useDelegate(
+                        itemExtent: 30,
+                        onSelectedItemChanged: (value) {
+                          setStateDialog(() {
+                            minHumiditySend = value % 303;
+                            minHumidity = minHumiditySend;
+                          });
+                        },
+                        perspective: 0.01,
+                        diameterRatio: 3,
+                        childDelegate: ListWheelChildBuilderDelegate(
+                          childCount: 303,
+                          builder: (context, index) {
+                            final value = index % 303;
+                            return Minutes(mins: value);
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          actions: [
+            ColorBtn(
+              text: 'Cancelar',
+              colors: const [Colors.blue, Colors.lightBlueAccent],
+              onTap: () {
+                setState(() {
+                  minHumiditySend = 0;
+                });
+                Navigator.pop(context);
+              },
+              width: 120,
+            ),
+            ColorBtn(
+              text: 'Guardar',
+              colors: const [Colors.blue, Colors.lightBlueAccent],
+              onTap: () {
+                setState(() {});
+                mqtt.publishJson(topicEntry, {"minHumidity": minHumiditySend});
+                Navigator.pop(context);
+              },
+              width: 120,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void showMaxTempPicker() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("Seleciona la temperatura maxima"),
+          content: StatefulBuilder(
+            builder: (BuildContext context, StateSetter setStateDialog) {
+              return SingleChildScrollView(
+                child: Column(
+                  children: [
+                    Text(
+                      'Si la temperatura sube hasta ese punto, el ventilador se activará de forma automática.',
+                    ),
+                    SizedBox(height: 10),
+                    ColorBtn(
+                      text: '${maxTemperatureSend.toString()}°',
+                      colors: const [Colors.lightGreen, Colors.green],
+                      onTap: () {},
+                    ),
+                    SizedBox(height: 10),
+                    SizedBox(
+                      height: 70,
+                      width: 50,
+                      child: ListWheelScrollView.useDelegate(
+                        itemExtent: 30,
+                        onSelectedItemChanged: (value) {
+                          setStateDialog(() {
+                            maxTemperatureSend = value % 101;
+                          });
+                        },
+                        perspective: 0.01,
+                        diameterRatio: 3,
+                        childDelegate: ListWheelChildBuilderDelegate(
+                          childCount: 303,
+                          builder: (context, index) {
+                            final degrees = index % 101;
+                            return TemperatureDegrees(degrees: degrees);
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+          actions: [
+            ColorBtn(
+              text: 'Cancelar',
+              colors: const [Colors.blue, Colors.lightBlueAccent],
+              onTap: () {
+                setState(() {
+                  maxTemperatureSend = 0;
+                });
+                Navigator.pop(context);
+              },
+              width: 120,
+            ),
+            ColorBtn(
+              text: 'Guardar',
+              colors: const [Colors.blue, Colors.lightBlueAccent],
+              onTap: () {
+                setState(() {});
+                mqtt.publishJson(topicEntry, {
+                  "maxTemperature": maxTemperatureSend,
+                });
+                Navigator.pop(context);
+              },
+              width: 120,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget lightWidget(dynamic size) {
     return Column(
       children: [
         SizedBox(
@@ -710,11 +1019,42 @@ class _HomePageState extends State<HomePage> {
             pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
           ),
         ),
+        SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            ColorBtn(
+              text: "Cantidad de luz recibida: $light",
+              colors: const [Colors.lightGreen, Colors.green],
+              onTap: () {},
+              width: size.width * 0.40,
+            ),
+            SizedBox(
+              height: 50,
+              width: size.width * 0.40,
+              child: ScalesWidget(
+                colors: [
+                  Color(0xFFFF4500),
+                  Color(0xFFFFA500),
+                  Color(0xFFFFD700),
+                  Color(0xFFFFFFE0),
+                  Color(0xFFF0F8FF),
+                  Color(0xFFE0FFFF),
+                  Color(0xFFB0E0E6),
+                  Color(0xFF87CEFA),
+                  Color(0xFF4682B4),
+                  Color(0xFF0000FF),
+                ],
+                pointsList: [FlSpot(7, 0.5)],
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
 
-  Widget dirtHumidity() {
+  Widget dirtHumidityWidget(dynamic size) {
     return Column(
       children: [
         SizedBox(
@@ -727,11 +1067,38 @@ class _HomePageState extends State<HomePage> {
             pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
           ),
         ),
+        SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            ColorBtn(
+              text: 'Humedad de la tierra: $dirtHumidity',
+              colors: const [Colors.lightGreen, Colors.green],
+              onTap: () {},
+              width: size.width * 0.40,
+            ),
+            SizedBox(
+              height: 50,
+              width: size.width * 0.40,
+              child: ScalesWidget(
+                colors: [
+                  Color(0xFFFF4500),
+                  Color.fromARGB(255, 255, 112, 60),
+                  Color(0xFF87CEFA),
+                  Color.fromARGB(255, 123, 204, 255),
+                  const Color.fromARGB(255, 56, 165, 255),
+                  Colors.blue,
+                ],
+                pointsList: [FlSpot(7, 0.5)],
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
 
-  Widget temperature() {
+  Widget temperatureWidget(dynamic size) {
     return Column(
       children: [
         SizedBox(
@@ -743,6 +1110,56 @@ class _HomePageState extends State<HomePage> {
             maxY: 100,
             pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
           ),
+        ),
+        SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Column(
+              children: [
+                ColorBtn(
+                  text: 'Temperatura: $temperature°',
+                  colors: const [Colors.lightGreen, Colors.green],
+                  onTap: () {},
+                ),
+                SizedBox(height: 10),
+                SizedBox(
+                  height: 50,
+                  width: size.width * 0.40,
+                  child: ScalesWidget(
+                    colors: [
+                      Color(0xFF0000FF),
+                      Color(0xFF00BFFF),
+                      Color(0xFF00FF7F),
+                      Color(0xFF7CFC00),
+                      Color(0xFFFFFF00),
+                      Color(0xFFFFA500),
+                      Color(0xFFFF4500),
+                      Color(0xFFFF0000), //
+                    ],
+                    pointsList: [FlSpot(temperatureSpot, 0.5)],
+                  ),
+                ),
+              ],
+            ),
+            Column(
+              children: [
+                ColorBtn(
+                  text: 'Temperatura maxima: $maxTemperature°',
+                  colors: const [Colors.redAccent, Colors.red],
+                  onTap: () {},
+                ),
+                SizedBox(height: 10),
+                ColorBtn(
+                  text: 'Cambiar temperatura maxima',
+                  colors: const [Colors.blue, Colors.lightBlueAccent],
+                  onTap: () {
+                    showMaxTempPicker();
+                  },
+                ),
+              ],
+            ),
+          ],
         ),
       ],
     );

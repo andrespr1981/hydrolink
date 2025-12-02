@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:hydrolink/utils/switch_color_btn.dart';
@@ -110,7 +111,7 @@ class _BluPageState extends State<BluPage> {
           child: Column(
             children: [
               Container(
-                height: size.height * 0.23,
+                height: size.height * 0.27,
                 width: size.width,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -199,7 +200,7 @@ class _BluPageState extends State<BluPage> {
               ),
               SizedBox(height: 20),
               Container(
-                height: size.height * 0.65,
+                height: size.height * 0.75,
                 width: size.width,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -327,10 +328,14 @@ class _BluPageState extends State<BluPage> {
                                     setState(() {
                                       waterOn = true;
                                     });
-                                    sendData(
-                                      'waterPump',
-                                      (60 / waterMinutes) + waterSeconds,
-                                    );
+                                    int time =
+                                        (60 * waterMinutes) + waterSeconds;
+                                    sendData('waterPump', time);
+                                    Timer(Duration(seconds: time), () {
+                                      setState(() {
+                                        waterOn = false;
+                                      });
+                                    });
                                   } else {
                                     setState(() {
                                       waterOn = false;
@@ -341,7 +346,7 @@ class _BluPageState extends State<BluPage> {
                                   showErrorMesage(
                                     context,
                                     'Ups...',
-                                    'Por favor, ingresa un tiempo de riego mayor a cero.',
+                                    'Ingresa un tiempo mayor a cero.',
                                   );
                                 }
                               },
@@ -533,19 +538,30 @@ class _BluPageState extends State<BluPage> {
                               ],
                               state: fanOn,
                               onTap: () {
-                                if (!fanOn) {
-                                  setState(() {
-                                    fanOn = true;
-                                  });
-                                  sendData(
-                                    'fan',
-                                    (60 / fanMinutes) + fanSeconds,
-                                  );
+                                if (fanMinutes > 0 || fanSeconds > 0) {
+                                  if (!fanOn) {
+                                    setState(() {
+                                      fanOn = true;
+                                    });
+                                    int time = (60 * fanMinutes) + fanSeconds;
+                                    sendData('fan', time);
+                                    Timer(Duration(seconds: time), () {
+                                      setState(() {
+                                        fanOn = false;
+                                      });
+                                    });
+                                  } else {
+                                    setState(() {
+                                      fanOn = false;
+                                    });
+                                    sendData('fan', false);
+                                  }
                                 } else {
-                                  setState(() {
-                                    fanOn = false;
-                                  });
-                                  sendData('fan', false);
+                                  showErrorMesage(
+                                    context,
+                                    'Ups...',
+                                    'Ingresa un tiempo mayor a cero.',
+                                  );
                                 }
                               },
                             ),
@@ -561,7 +577,7 @@ class _BluPageState extends State<BluPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Container(
-                    height: size.height * 0.15,
+                    height: size.height * 0.18,
                     width: size.width * 0.45,
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -631,7 +647,7 @@ class _BluPageState extends State<BluPage> {
                     ),
                   ),
                   Container(
-                    height: size.height * 0.15,
+                    height: size.height * 0.18,
                     width: size.width * 0.45,
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -699,7 +715,7 @@ class _BluPageState extends State<BluPage> {
               ),
               SizedBox(height: 20),
               Container(
-                height: size.height * 0.55,
+                height: size.height * 0.57,
                 width: size.width,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -847,6 +863,7 @@ class _BluPageState extends State<BluPage> {
                         onSelectedItemChanged: (value) {
                           setStateDialog(() {
                             minHumiditySend = value % 303;
+                            minHumidity = minHumiditySend;
                           });
                         },
                         perspective: 0.01,
@@ -881,6 +898,7 @@ class _BluPageState extends State<BluPage> {
               text: 'Guardar',
               colors: const [Colors.blue, Colors.lightBlueAccent],
               onTap: () {
+                setState(() {});
                 sendData('minHumidity', minHumiditySend);
                 Navigator.pop(context);
               },
@@ -984,6 +1002,7 @@ class _BluPageState extends State<BluPage> {
                         onSelectedItemChanged: (value) {
                           setStateDialog(() {
                             maxTemperatureSend = value % 101;
+                            maxTemperature = maxTemperatureSend;
                           });
                         },
                         perspective: 0.01,
@@ -1018,6 +1037,7 @@ class _BluPageState extends State<BluPage> {
               text: 'Guardar',
               colors: const [Colors.blue, Colors.lightBlueAccent],
               onTap: () {
+                setState(() {});
                 sendData('maxTemperature', maxTemperatureSend);
                 Navigator.pop(context);
               },
@@ -1070,6 +1090,7 @@ class _BluPageState extends State<BluPage> {
               text: 'Guardar',
               colors: const [Colors.blue, Colors.lightBlueAccent],
               onTap: () {
+                setState(() {});
                 sendData('waterDays', waterDays);
                 Navigator.pop(context);
               },
@@ -1102,7 +1123,9 @@ class _BluPageState extends State<BluPage> {
 
             try {
               await device!.connect(autoConnect: false);
-              setState(() => isConnected = true);
+              if (mounted) {
+                setState(() => isConnected = true);
+              }
 
               List<BluetoothService> services = await device!
                   .discoverServices();
@@ -1115,49 +1138,42 @@ class _BluPageState extends State<BluPage> {
                       await characteristic!.setNotifyValue(true);
 
                       characteristic!.lastValueStream.listen((value) {
+                        if (value.isEmpty) {
+                          return;
+                        }
                         String msg = String.fromCharCodes(value);
                         Map<String, dynamic> json = jsonDecode(msg);
 
-                        if (json['humidity'] < 40) {
+                        if (mounted) {
                           setState(() {
-                            waterMinutes = 1;
-                          });
-                        } else if (json['humidity'] < 60) {
-                          setState(() {
-                            waterSeconds = 30;
-                          });
-                        } else {
-                          setState(() {
-                            waterMinutes = 2;
+                            if (json['humidity'] < 40) {
+                              waterMinutes = 1;
+                            } else if (json['humidity'] < 60) {
+                              waterSeconds = 30;
+                            } else {
+                              waterMinutes = 2;
+                            }
+
+                            if (json['temperature'] > 30) {
+                              temperatureSpot = 7.5;
+                            } else if (json['temperature'] < 25 &&
+                                json['temperature'] > 18) {
+                              temperatureSpot = 5.5;
+                            } else {
+                              temperatureSpot = 2.5;
+                            }
+
+                            humidity = json['humidity'].toString();
+                            humiditySpot = double.parse(humidity);
+                            temperature = json['temperature'].toString();
+                            dirtHumidity = json['dirt_humidity'].toString();
+                            light = json['light'].toString();
+                            minHumidity = json['minHumidity'];
+                            maxTemperature = json['maxTemperature'];
+                            waterDays = List<bool>.from(json['water_days']);
+                            nextWaterDay = getNextWateringDate(waterDays);
                           });
                         }
-
-                        if (json['temperature'] > 30) {
-                          setState(() {
-                            temperatureSpot = 7.5;
-                          });
-                        } else if (json['temperature'] < 25 &&
-                            json['temperature'] > 18) {
-                          setState(() {
-                            temperatureSpot = 5.5;
-                          });
-                        } else {
-                          setState(() {
-                            temperatureSpot = 2.5;
-                          });
-                        }
-
-                        setState(() {
-                          humidity = json['humidity'].toString();
-                          humiditySpot = double.parse(humidity);
-                          temperature = json['temperature'].toString();
-                          dirtHumidity = json['dirt_humidity'].toString();
-                          light = json['light'].toString();
-                          minHumidity = json['minHumidity'];
-                          maxTemperature = json['maxTemperature'];
-                          waterDays = List<bool>.from(json['water_days']);
-                          nextWaterDay = getNextWateringDate(waterDays);
-                        });
                       });
                     }
                   }
