@@ -1,22 +1,22 @@
+import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
-
+import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:flutter/material.dart';
+import 'package:hydrolink/utils/tiles.dart';
+import 'package:hydrolink/utils/database.dart';
 import 'package:hydrolink/utils/color_btn.dart';
-import 'package:hydrolink/utils/fan_progress_indicator.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:table_calendar/table_calendar.dart';
 import 'package:hydrolink/utils/pop_up_message.dart';
 import 'package:hydrolink/utils/switch_color_btn.dart';
-import 'package:hydrolink/utils/tiles.dart';
-import 'package:intl/date_symbol_data_local.dart';
-import 'package:intl/intl.dart';
+import 'package:hydrolink/utils/fan_progress_indicator.dart';
 import 'package:liquid_progress_indicator_v2/liquid_progress_indicator.dart';
-import 'package:table_calendar/table_calendar.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../utils/linear_chart.dart';
-
 import '../utils/mqtt_service.dart';
+
+import 'settings_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -25,7 +25,6 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-//Me quede haciendo lo de que maneje los datos el mqtt
 class _HomePageState extends State<HomePage> {
   int graphicSelected = 0;
   bool waterOn = false;
@@ -58,6 +57,11 @@ class _HomePageState extends State<HomePage> {
   late double temperatureSpot = 5.5;
   late int maxTemperature = 0;
   late int maxTemperatureSend = 0;
+
+  late List<FlSpot> humiditySpots = [];
+  late List<FlSpot> lightSpots = [];
+  late List<FlSpot> dirtHumiditySpots = [];
+  late List<FlSpot> temperatureSpots = [];
 
   late String light = '0';
 
@@ -102,8 +106,10 @@ class _HomePageState extends State<HomePage> {
           light = json['light'].toString();
           minHumidity = json['minHumidity'];
           maxTemperature = json['maxTemperature'];
+          waterRemaining = json['waterRemaining'];
           waterDays = List<bool>.from(json['water_days']);
         });
+        addGrapithData();
       }
     };
     if (await mqtt.connect()) {
@@ -150,7 +156,17 @@ class _HomePageState extends State<HomePage> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text("HydroLink"),
-        actions: [IconButton(onPressed: () {}, icon: Icon(Icons.settings))],
+        actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => SettingsPage()),
+              );
+            },
+            icon: Icon(Icons.settings),
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -707,23 +723,297 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<List<FlSpot>> getGrapithData() async {
-    final prefs = await SharedPreferences.getInstance();
+  List<FlSpot> buildSpots(List<Map<String, dynamic>> list) {
+    List<FlSpot> spots = [];
+    for (int i = 0; i < list.length; i++) {
+      double x = i.toDouble() + 1;
+      double y = double.tryParse(list[i]['data'].toString()) ?? 0.0;
+      spots.add(FlSpot(x, y));
+    }
+    return spots;
+  }
 
+  void getGrapithData() async {
+    final humidityList = await LocalDatabase().readData('humidity');
+    final lightList = await LocalDatabase().readData('light');
+    final dirtHumList = await LocalDatabase().readData('dirtHumidity');
+    final temperatureList = await LocalDatabase().readData('temperature');
+
+    setState(() {
+      humiditySpots = buildSpots(humidityList);
+      lightSpots = buildSpots(lightList);
+      dirtHumiditySpots = buildSpots(dirtHumList);
+      temperatureSpots = buildSpots(temperatureList);
+    });
+  }
+
+  void addGrapithData() async {
+    final data = await LocalDatabase().readData('humidity');
     DateTime now = DateTime.now();
     var formatter = DateFormat('yyyy-MM-dd');
     String formattedDate = formatter.format(now);
 
-    List<String> humidity = prefs.getStringList('humidity') ?? [];
-    List<String> light = prefs.getStringList('light') ?? [];
-    List<String> temperature = prefs.getStringList('temperature') ?? [];
-    List<String> dirtHumidity = prefs.getStringList('dirtHumidity') ?? [];
+    if (data.isEmpty) {
+      await LocalDatabase().addData('humidity', formattedDate, humidity);
+      await LocalDatabase().addData('light', formattedDate, light);
+      await LocalDatabase().addData(
+        'dirtHumidity',
+        formattedDate,
+        dirtHumidity,
+      );
+      await LocalDatabase().addData('temperature', formattedDate, temperature);
+      getGrapithData();
+      return;
+    }
+    final finalRow = data.last;
+    if (finalRow['date'] == formattedDate) {
+      getGrapithData();
+      return;
+    }
 
-    await prefs.setStringList('humidity', humidity);
-    await prefs.setStringList('light', light);
-    await prefs.setStringList('temperature', temperature);
-    await prefs.setStringList('dirtHumidity', dirtHumidity);
-    return [];
+    await LocalDatabase().addData('humidity', formattedDate, humidity);
+    await LocalDatabase().addData('light', formattedDate, light);
+    await LocalDatabase().addData('dirtHumidity', formattedDate, dirtHumidity);
+    await LocalDatabase().addData('temperature', formattedDate, temperature);
+    getGrapithData();
+
+    return;
+  }
+
+  Widget changeWidget(int value, dynamic size) {
+    if (value == 0) {
+      return relativeHumidityWidget(size);
+    } else if (value == 1) {
+      return lightWidget(size);
+    } else if (value == 2) {
+      return dirtHumidityWidget(size);
+    } else {
+      return temperatureWidget(size);
+    }
+  }
+
+  Widget relativeHumidityWidget(dynamic size) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 200,
+          child: GraphicWidget(
+            minX: 1,
+            maxX: 7,
+            minY: 0,
+            maxY: 100,
+            pointsList: humiditySpots,
+          ),
+        ),
+        SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Column(
+              children: [
+                ColorBtn(
+                  text: 'Humedad relativa: $humidity',
+                  colors: const [Colors.lightGreen, Colors.green],
+                  onTap: () {},
+                ),
+                SizedBox(height: 10),
+                SizedBox(
+                  height: 50,
+                  width: size.width * 0.40,
+                  child: ScalesWidget(
+                    colors: [
+                      Color(0xFFFF4500),
+                      Color.fromARGB(255, 255, 112, 60),
+                      Color(0xFF87CEFA),
+                      Color.fromARGB(255, 123, 204, 255),
+                      const Color.fromARGB(255, 56, 165, 255),
+                      Colors.blue,
+                    ],
+                    pointsList: humiditySpots,
+                  ),
+                ),
+              ],
+            ),
+            Column(
+              children: [
+                ColorBtn(
+                  text: 'Humedad relativa minima: $minHumidity',
+                  colors: const [Colors.redAccent, Colors.red],
+                  onTap: () {},
+                ),
+                SizedBox(height: 10),
+                ColorBtn(
+                  text: 'Cambiar humedad relativa minima',
+                  colors: const [Colors.blue, Colors.lightBlueAccent],
+                  onTap: () {
+                    showMinHumidityPicker();
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget lightWidget(dynamic size) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 200,
+          child: GraphicWidget(
+            minX: 1,
+            maxX: 7,
+            minY: 0,
+            maxY: 1,
+            pointsList: lightSpots,
+          ),
+        ),
+        SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            ColorBtn(
+              text: "Cantidad de luz recibida: $light",
+              colors: const [Colors.lightGreen, Colors.green],
+              onTap: () {},
+              width: size.width * 0.40,
+            ),
+            SizedBox(
+              height: 50,
+              width: size.width * 0.40,
+              child: ScalesWidget(
+                colors: [
+                  Color(0xFFFF4500),
+                  Color(0xFFFFA500),
+                  Color(0xFFFFD700),
+                  Color(0xFFFFFFE0),
+                  Color(0xFFF0F8FF),
+                  Color(0xFFE0FFFF),
+                  Color(0xFFB0E0E6),
+                  Color(0xFF87CEFA),
+                  Color(0xFF4682B4),
+                  Color(0xFF0000FF),
+                ],
+                pointsList: lightSpots,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget dirtHumidityWidget(dynamic size) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 200,
+          child: GraphicWidget(
+            minX: 1,
+            maxX: 7,
+            minY: 0,
+            maxY: 4000,
+            pointsList: dirtHumiditySpots,
+          ),
+        ),
+        SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            ColorBtn(
+              text: 'Humedad de la tierra: $dirtHumidity',
+              colors: const [Colors.lightGreen, Colors.green],
+              onTap: () {},
+              width: size.width * 0.40,
+            ),
+            SizedBox(
+              height: 50,
+              width: size.width * 0.40,
+              child: ScalesWidget(
+                colors: [
+                  Color(0xFFFF4500),
+                  Color.fromARGB(255, 255, 112, 60),
+                  Color(0xFF87CEFA),
+                  Color.fromARGB(255, 123, 204, 255),
+                  const Color.fromARGB(255, 56, 165, 255),
+                  Colors.blue,
+                ],
+                pointsList: dirtHumiditySpots,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget temperatureWidget(dynamic size) {
+    return Column(
+      children: [
+        SizedBox(
+          height: 200,
+          child: GraphicWidget(
+            minX: 1,
+            maxX: 7,
+            minY: 0,
+            maxY: 100,
+            pointsList: temperatureSpots,
+          ),
+        ),
+        SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            Column(
+              children: [
+                ColorBtn(
+                  text: 'Temperatura: $temperature°',
+                  colors: const [Colors.lightGreen, Colors.green],
+                  onTap: () {},
+                ),
+                SizedBox(height: 10),
+                SizedBox(
+                  height: 50,
+                  width: size.width * 0.40,
+                  child: ScalesWidget(
+                    colors: [
+                      Color(0xFF0000FF),
+                      Color(0xFF00BFFF),
+                      Color(0xFF00FF7F),
+                      Color(0xFF7CFC00),
+                      Color(0xFFFFFF00),
+                      Color(0xFFFFA500),
+                      Color(0xFFFF4500),
+                      Color(0xFFFF0000), //
+                    ],
+                    pointsList: temperatureSpots,
+                  ),
+                ),
+              ],
+            ),
+            Column(
+              children: [
+                ColorBtn(
+                  text: 'Temperatura maxima: $maxTemperature°',
+                  colors: const [Colors.redAccent, Colors.red],
+                  onTap: () {},
+                ),
+                SizedBox(height: 10),
+                ColorBtn(
+                  text: 'Cambiar temperatura maxima',
+                  colors: const [Colors.blue, Colors.lightBlueAccent],
+                  onTap: () {
+                    showMaxTempPicker();
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   void showDatePicker() {
@@ -774,83 +1064,6 @@ class _HomePageState extends State<HomePage> {
           ],
         );
       },
-    );
-  }
-
-  Widget changeWidget(int value, dynamic size) {
-    if (value == 0) {
-      return relativeHumidityWidget(size);
-    } else if (value == 1) {
-      return lightWidget(size);
-    } else if (value == 2) {
-      return dirtHumidityWidget(size);
-    } else {
-      return temperatureWidget(size);
-    }
-  }
-
-  Widget relativeHumidityWidget(dynamic size) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 200,
-          child: GraphicWidget(
-            minX: 1,
-            maxX: 7,
-            minY: 0,
-            maxY: 4000,
-            pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
-          ),
-        ),
-        SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            Column(
-              children: [
-                ColorBtn(
-                  text: 'Humedad relativa: $humidity',
-                  colors: const [Colors.lightGreen, Colors.green],
-                  onTap: () {},
-                ),
-                SizedBox(height: 10),
-                SizedBox(
-                  height: 50,
-                  width: size.width * 0.40,
-                  child: ScalesWidget(
-                    colors: [
-                      Color(0xFFFF4500),
-                      Color.fromARGB(255, 255, 112, 60),
-                      Color(0xFF87CEFA),
-                      Color.fromARGB(255, 123, 204, 255),
-                      const Color.fromARGB(255, 56, 165, 255),
-                      Colors.blue,
-                    ],
-                    pointsList: [FlSpot(humiditySpot, 0.5)],
-                  ),
-                ),
-              ],
-            ),
-            Column(
-              children: [
-                ColorBtn(
-                  text: 'Humedad relativa minima: $minHumidity',
-                  colors: const [Colors.redAccent, Colors.red],
-                  onTap: () {},
-                ),
-                SizedBox(height: 10),
-                ColorBtn(
-                  text: 'Cambiar humedad relativa minima',
-                  colors: const [Colors.blue, Colors.lightBlueAccent],
-                  onTap: () {
-                    showMinHumidityPicker();
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      ],
     );
   }
 
@@ -1003,165 +1216,6 @@ class _HomePageState extends State<HomePage> {
           ],
         );
       },
-    );
-  }
-
-  Widget lightWidget(dynamic size) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 200,
-          child: GraphicWidget(
-            minX: 1,
-            maxX: 7,
-            minY: 0,
-            maxY: 12000,
-            pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
-          ),
-        ),
-        SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            ColorBtn(
-              text: "Cantidad de luz recibida: $light",
-              colors: const [Colors.lightGreen, Colors.green],
-              onTap: () {},
-              width: size.width * 0.40,
-            ),
-            SizedBox(
-              height: 50,
-              width: size.width * 0.40,
-              child: ScalesWidget(
-                colors: [
-                  Color(0xFFFF4500),
-                  Color(0xFFFFA500),
-                  Color(0xFFFFD700),
-                  Color(0xFFFFFFE0),
-                  Color(0xFFF0F8FF),
-                  Color(0xFFE0FFFF),
-                  Color(0xFFB0E0E6),
-                  Color(0xFF87CEFA),
-                  Color(0xFF4682B4),
-                  Color(0xFF0000FF),
-                ],
-                pointsList: [FlSpot(7, 0.5)],
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget dirtHumidityWidget(dynamic size) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 200,
-          child: GraphicWidget(
-            minX: 1,
-            maxX: 7,
-            minY: 0,
-            maxY: 4000,
-            pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
-          ),
-        ),
-        SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            ColorBtn(
-              text: 'Humedad de la tierra: $dirtHumidity',
-              colors: const [Colors.lightGreen, Colors.green],
-              onTap: () {},
-              width: size.width * 0.40,
-            ),
-            SizedBox(
-              height: 50,
-              width: size.width * 0.40,
-              child: ScalesWidget(
-                colors: [
-                  Color(0xFFFF4500),
-                  Color.fromARGB(255, 255, 112, 60),
-                  Color(0xFF87CEFA),
-                  Color.fromARGB(255, 123, 204, 255),
-                  const Color.fromARGB(255, 56, 165, 255),
-                  Colors.blue,
-                ],
-                pointsList: [FlSpot(7, 0.5)],
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget temperatureWidget(dynamic size) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 200,
-          child: GraphicWidget(
-            minX: 1,
-            maxX: 7,
-            minY: 0,
-            maxY: 100,
-            pointsList: [FlSpot(1, 8), FlSpot(2, 6), FlSpot(3, 4)],
-          ),
-        ),
-        SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            Column(
-              children: [
-                ColorBtn(
-                  text: 'Temperatura: $temperature°',
-                  colors: const [Colors.lightGreen, Colors.green],
-                  onTap: () {},
-                ),
-                SizedBox(height: 10),
-                SizedBox(
-                  height: 50,
-                  width: size.width * 0.40,
-                  child: ScalesWidget(
-                    colors: [
-                      Color(0xFF0000FF),
-                      Color(0xFF00BFFF),
-                      Color(0xFF00FF7F),
-                      Color(0xFF7CFC00),
-                      Color(0xFFFFFF00),
-                      Color(0xFFFFA500),
-                      Color(0xFFFF4500),
-                      Color(0xFFFF0000), //
-                    ],
-                    pointsList: [FlSpot(temperatureSpot, 0.5)],
-                  ),
-                ),
-              ],
-            ),
-            Column(
-              children: [
-                ColorBtn(
-                  text: 'Temperatura maxima: $maxTemperature°',
-                  colors: const [Colors.redAccent, Colors.red],
-                  onTap: () {},
-                ),
-                SizedBox(height: 10),
-                ColorBtn(
-                  text: 'Cambiar temperatura maxima',
-                  colors: const [Colors.blue, Colors.lightBlueAccent],
-                  onTap: () {
-                    showMaxTempPicker();
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      ],
     );
   }
 }

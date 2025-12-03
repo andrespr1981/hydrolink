@@ -46,8 +46,9 @@ dependencies:
   photo_manager: ^3.7.1
   device_info_plus: ^12.2.0
   path_provider: ^2.1.5
-  shared_preferences: ^2.5.3
   mqtt5_client: ^4.15.2
+  sqflite: ^2.4.2
+  path: ^1.9.1
 
 
 dev_dependencies:

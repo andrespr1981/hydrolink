@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../pages/wifi_page.dart';
+
 import '../pages/blu_page.dart';
+import '../pages/wifi_page.dart';
 import '../pages/camera_page.dart';
 
 class AppNavigator extends StatefulWidget {

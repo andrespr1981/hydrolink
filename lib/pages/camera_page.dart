@@ -1,12 +1,11 @@
 import 'dart:io';
-
-import 'package:permission_handler/permission_handler.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_mjpeg/flutter_mjpeg.dart';
 import 'package:http/http.dart' as http;
-import 'package:hydrolink/utils/switch_color_btn.dart';
 import 'package:photo_manager/photo_manager.dart';
+import 'package:flutter_mjpeg/flutter_mjpeg.dart';
+import 'package:hydrolink/utils/switch_color_btn.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../utils/color_btn.dart';
 import '../utils/pop_up_message.dart';

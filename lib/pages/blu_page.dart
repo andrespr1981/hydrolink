@@ -1,21 +1,19 @@
+import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:convert';
-
-import 'package:hydrolink/utils/switch_color_btn.dart';
-import 'package:intl/date_symbol_data_local.dart';
-import 'package:flutter/material.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'dart:typed_data';
 import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:liquid_progress_indicator_v2/liquid_progress_indicator.dart';
 
-import 'dart:typed_data';
-
-import '../utils/pop_up_message.dart';
-import '../utils/linear_chart.dart';
 import '../utils/tiles.dart';
 import '../utils/color_btn.dart';
+import '../utils/linear_chart.dart';
+import '../utils/pop_up_message.dart';
+import '../utils/switch_color_btn.dart';
 
 class BluPage extends StatefulWidget {
   const BluPage({super.key});
@@ -1171,6 +1169,7 @@ class _BluPageState extends State<BluPage> {
                             minHumidity = json['minHumidity'];
                             maxTemperature = json['maxTemperature'];
                             waterDays = List<bool>.from(json['water_days']);
+                            waterRemaining = json['waterRemaining'];
                             nextWaterDay = getNextWateringDate(waterDays);
                           });
                         }
