@@ -33,26 +33,34 @@ class _BluPageState extends State<BluPage> {
   final String characteristicUuid = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
   final List<String> days = [
+    'Domingo',
     'Lunes',
     'Martes',
     'Miercoles',
     'Jueves',
     'Viernes',
     'Sabado',
-    'Domingo',
   ];
 
   List<bool> waterDays = [false, false, false, false, false, false, false];
 
   bool waterOn = false;
+  bool waterOnRecom = false;
 
   bool fanOn = false;
+  bool fanOnRecom = false;
 
   late int waterMinutes = 0;
   late int waterSeconds = 0;
 
   late int fanMinutes = 0;
   late int fanSeconds = 0;
+
+  late int recomWaterTimeMinutes = 0;
+  late int recomWaterTimeSeconds = 0;
+
+  late int recomFanTimeMinutes = 0;
+  late int recomFanTimeSeconds = 0;
 
   //data
   late double waterRemaining = 0.5;
@@ -152,19 +160,11 @@ class _BluPageState extends State<BluPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              'Produccion: 00 dias',
-                              textAlign: TextAlign.center,
-                            ),
-                            Text(
                               'Floracion: 00 dias',
                               textAlign: TextAlign.center,
                             ),
                             Text(
                               'Desarrollo: 00 dias',
-                              textAlign: TextAlign.center,
-                            ),
-                            Text(
-                              'Germinacion: 00 dias',
                               textAlign: TextAlign.center,
                             ),
                             Text(
@@ -197,8 +197,246 @@ class _BluPageState extends State<BluPage> {
                 ),
               ),
               SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    height: size.height * 0.45,
+                    width: size.width * 0.45,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      borderRadius: BorderRadius.all(Radius.circular(20)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withValues(alpha: 0.3),
+                          spreadRadius: 1,
+                          blurRadius: 5,
+                          offset: Offset(10, 8),
+                        ),
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          offset: Offset(10, 5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            Text(
+                              'AGUA RESTANTE',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            Column(
+                              children: [
+                                SizedBox(height: 10),
+                                SizedBox(
+                                  height: 100,
+                                  width: 100,
+                                  child: LiquidCircularProgressIndicator(
+                                    value: waterRemaining,
+                                    valueColor: AlwaysStoppedAnimation(
+                                      Colors.blueAccent,
+                                    ),
+                                    backgroundColor: Colors.white,
+                                    borderColor: Colors.black,
+                                    borderWidth: 0.0,
+                                    direction: Axis.vertical,
+                                  ),
+                                ),
+                                SizedBox(height: 10),
+                                ColorBtn(
+                                  text:
+                                      'Tiempo de regado: $waterMinutes:${waterSeconds < 10 ? '0$waterSeconds' : waterSeconds}${waterMinutes < 1 ? ' seg' : ' min'}',
+                                  colors: const [
+                                    Colors.lightGreen,
+                                    Colors.green,
+                                  ],
+                                  onTap: () {},
+                                  height: 60,
+                                ),
+                                Row(
+                                  children: [
+                                    SizedBox(
+                                      height: 70,
+                                      width: 50,
+                                      child: ListWheelScrollView.useDelegate(
+                                        onSelectedItemChanged: (value) {
+                                          setState(() {
+                                            waterMinutes = (value % 6);
+                                          });
+                                        },
+                                        itemExtent: 30,
+                                        perspective: 0.01,
+                                        diameterRatio: 3,
+                                        childDelegate:
+                                            ListWheelChildBuilderDelegate(
+                                              childCount: 50,
+                                              builder: (context, index) {
+                                                final minute = index % 6;
+                                                return Minutes(mins: minute);
+                                              },
+                                            ),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      height: 70,
+                                      width: 50,
+                                      child: ListWheelScrollView.useDelegate(
+                                        itemExtent: 30,
+                                        onSelectedItemChanged: (value) {
+                                          setState(() {
+                                            waterSeconds = value % 61;
+                                          });
+                                        },
+                                        perspective: 0.01,
+                                        diameterRatio: 3,
+                                        childDelegate:
+                                            ListWheelChildBuilderDelegate(
+                                              childCount: 183,
+                                              builder: (context, index) {
+                                                final second = index % 61;
+                                                return Seconds(seconds: second);
+                                              },
+                                            ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 10),
+                                SwitchColorBtn(
+                                  textTrue: 'Detener regado',
+                                  textFalse: 'Iniciar regado',
+                                  colorsTrue: const [Colors.red, Colors.orange],
+                                  colorsFalse: const [
+                                    Colors.blue,
+                                    Colors.lightBlueAccent,
+                                  ],
+                                  state: waterOn,
+                                  onTap: () {
+                                    if (waterMinutes > 0 || waterSeconds > 0) {
+                                      if (!waterOn) {
+                                        setState(() {
+                                          waterOn = true;
+                                        });
+                                        int time =
+                                            (60 * waterMinutes) + waterSeconds;
+                                        sendData('waterPump', time);
+                                        Timer(Duration(seconds: time), () {
+                                          setState(() {
+                                            waterOn = false;
+                                          });
+                                        });
+                                      } else {
+                                        setState(() {
+                                          waterOn = false;
+                                        });
+                                        sendData('waterPump', false);
+                                      }
+                                    } else {
+                                      showErrorMesage(
+                                        context,
+                                        'Ups...',
+                                        'Ingresa un tiempo mayor a cero.',
+                                      );
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    height: size.height * 0.45,
+                    width: size.width * 0.45,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      borderRadius: BorderRadius.all(Radius.circular(20)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withValues(alpha: 0.3),
+                          spreadRadius: 1,
+                          blurRadius: 5,
+                          offset: Offset(10, 8),
+                        ),
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          offset: Offset(10, 5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        SizedBox(height: 10),
+                        Text(
+                          'HUMEDAD RELATIVA',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        SizedBox(height: 10),
+                        ColorBtn(
+                          text: 'Humedad relativa: $humidity',
+                          colors: const [Colors.lightGreen, Colors.green],
+                          onTap: () {},
+                        ),
+                        SizedBox(height: 10),
+                        SizedBox(
+                          height: 50,
+                          width: size.width * 0.40,
+                          child: ScalesWidget(
+                            colors: [
+                              Color(0xFFFF4500),
+                              Color.fromARGB(255, 255, 112, 60),
+                              Color(0xFF87CEFA),
+                              Color.fromARGB(255, 123, 204, 255),
+                              const Color.fromARGB(255, 56, 165, 255),
+                              Colors.blue,
+                            ],
+                            pointsList: [FlSpot(humiditySpot, 0.5)],
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        ColorBtn(
+                          text: 'Humedad relativa minima: $minHumidity',
+                          colors: const [Colors.redAccent, Colors.red],
+                          onTap: () {},
+                        ),
+                        SizedBox(height: 10),
+                        ColorBtn(
+                          text: 'Cambiar humedad relativa minima',
+                          colors: const [Colors.blue, Colors.lightBlueAccent],
+                          onTap: () {
+                            showMinHumidityPicker();
+                          },
+                        ),
+                        SizedBox(height: 10),
+                        ColorBtn(
+                          text:
+                              'Proximo regado: ${DateFormat('yyyy-MM-dd').format(nextWaterDay)}',
+                          colors: const [Colors.lightGreen, Colors.green],
+                          onTap: () {},
+                          height: 60,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 20),
               Container(
-                height: size.height * 0.75,
+                height: size.height * 0.32,
                 width: size.width,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -219,200 +457,6 @@ class _BluPageState extends State<BluPage> {
                 ),
                 child: Column(
                   children: [
-                    SizedBox(height: 10),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        Text(
-                          'AGUA RESTANTE',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          'HUMEDAD RELATIVA',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Column(
-                          children: [
-                            SizedBox(height: 10),
-                            SizedBox(
-                              height: 100,
-                              width: 100,
-                              child: LiquidCircularProgressIndicator(
-                                value: waterRemaining,
-                                valueColor: AlwaysStoppedAnimation(
-                                  Colors.blueAccent,
-                                ),
-                                backgroundColor: Colors.white,
-                                borderColor: Colors.black,
-                                borderWidth: 0.0,
-                                direction: Axis.vertical,
-                              ),
-                            ),
-                            SizedBox(height: 10),
-                            ColorBtn(
-                              text:
-                                  'Tiempo de regado: $waterMinutes:${waterSeconds < 10 ? '0$waterSeconds' : waterSeconds}${waterMinutes < 1 ? ' seg' : ' min'}',
-                              colors: const [Colors.lightGreen, Colors.green],
-                              onTap: () {},
-                              height: 60,
-                            ),
-                            Row(
-                              children: [
-                                SizedBox(
-                                  height: 70,
-                                  width: 50,
-                                  child: ListWheelScrollView.useDelegate(
-                                    onSelectedItemChanged: (value) {
-                                      setState(() {
-                                        waterMinutes = (value % 6);
-                                      });
-                                    },
-                                    itemExtent: 30,
-                                    perspective: 0.01,
-                                    diameterRatio: 3,
-                                    childDelegate:
-                                        ListWheelChildBuilderDelegate(
-                                          childCount: 50,
-                                          builder: (context, index) {
-                                            final minute = index % 6;
-                                            return Minutes(mins: minute);
-                                          },
-                                        ),
-                                  ),
-                                ),
-                                SizedBox(
-                                  height: 70,
-                                  width: 50,
-                                  child: ListWheelScrollView.useDelegate(
-                                    itemExtent: 30,
-                                    onSelectedItemChanged: (value) {
-                                      setState(() {
-                                        waterSeconds = value % 61;
-                                      });
-                                    },
-                                    perspective: 0.01,
-                                    diameterRatio: 3,
-                                    childDelegate:
-                                        ListWheelChildBuilderDelegate(
-                                          childCount: 183,
-                                          builder: (context, index) {
-                                            final second = index % 61;
-                                            return Seconds(seconds: second);
-                                          },
-                                        ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 10),
-                            SwitchColorBtn(
-                              textTrue: 'Detener regado',
-                              textFalse: 'Iniciar regado',
-                              colorsTrue: const [Colors.red, Colors.orange],
-                              colorsFalse: const [
-                                Colors.blue,
-                                Colors.lightBlueAccent,
-                              ],
-                              state: waterOn,
-                              onTap: () {
-                                if (waterMinutes > 0 || waterSeconds > 0) {
-                                  if (!waterOn) {
-                                    setState(() {
-                                      waterOn = true;
-                                    });
-                                    int time =
-                                        (60 * waterMinutes) + waterSeconds;
-                                    sendData('waterPump', time);
-                                    Timer(Duration(seconds: time), () {
-                                      setState(() {
-                                        waterOn = false;
-                                      });
-                                    });
-                                  } else {
-                                    setState(() {
-                                      waterOn = false;
-                                    });
-                                    sendData('waterPump', false);
-                                  }
-                                } else {
-                                  showErrorMesage(
-                                    context,
-                                    'Ups...',
-                                    'Ingresa un tiempo mayor a cero.',
-                                  );
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                        Column(
-                          children: [
-                            Column(
-                              children: [
-                                ColorBtn(
-                                  text: 'Humedad relativa: $humidity',
-                                  colors: const [
-                                    Colors.lightGreen,
-                                    Colors.green,
-                                  ],
-                                  onTap: () {},
-                                ),
-                                SizedBox(height: 10),
-                                SizedBox(
-                                  height: 50,
-                                  width: size.width * 0.40,
-                                  child: ScalesWidget(
-                                    colors: [
-                                      Color(0xFFFF4500),
-                                      Color.fromARGB(255, 255, 112, 60),
-                                      Color(0xFF87CEFA),
-                                      Color.fromARGB(255, 123, 204, 255),
-                                      const Color.fromARGB(255, 56, 165, 255),
-                                      Colors.blue,
-                                    ],
-                                    pointsList: [FlSpot(humiditySpot, 0.5)],
-                                  ),
-                                ),
-                                SizedBox(height: 10),
-                                ColorBtn(
-                                  text: 'Humedad relativa minima: $minHumidity',
-                                  colors: const [Colors.redAccent, Colors.red],
-                                  onTap: () {},
-                                ),
-                                SizedBox(height: 10),
-                                ColorBtn(
-                                  text: 'Cambiar humedad relativa minima',
-                                  colors: const [
-                                    Colors.blue,
-                                    Colors.lightBlueAccent,
-                                  ],
-                                  onTap: () {
-                                    showMinHumidityPicker();
-                                  },
-                                ),
-                                SizedBox(height: 10),
-                                ColorBtn(
-                                  text:
-                                      'Proximo regado: ${DateFormat('yyyy-MM-dd').format(nextWaterDay)}',
-                                  colors: const [
-                                    Colors.lightGreen,
-                                    Colors.green,
-                                  ],
-                                  onTap: () {},
-                                  height: 60,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
                     SizedBox(height: 10),
                     Text(
                       'TEMPERATURA',
@@ -636,7 +680,14 @@ class _BluPageState extends State<BluPage> {
                                   Color(0xFF4682B4),
                                   Color(0xFF0000FF),
                                 ],
-                                pointsList: [FlSpot(7, 0.5)],
+                                pointsList: [
+                                  FlSpot(
+                                    light == "0"
+                                        ? 5.5
+                                        : (double.parse(light) / 10) * 10,
+                                    0.5,
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -701,10 +752,174 @@ class _BluPageState extends State<BluPage> {
                                   const Color.fromARGB(255, 56, 165, 255),
                                   Colors.blue,
                                 ],
-                                pointsList: [FlSpot(7, 0.5)],
+                                pointsList: [
+                                  FlSpot(
+                                    dirtHumidity == "0"
+                                        ? 5.5
+                                        : (double.parse(dirtHumidity) / 4095) *
+                                              10,
+                                    0.5,
+                                  ),
+                                ],
                               ),
                             ),
                           ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    height: size.height * 0.18,
+                    width: size.width * 0.45,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      borderRadius: BorderRadius.all(Radius.circular(20)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withValues(),
+                          spreadRadius: 1,
+                          blurRadius: 10,
+                          offset: Offset(10, 5),
+                        ),
+                        BoxShadow(
+                          color: Colors.white.withValues(),
+                          blurRadius: 50,
+                          offset: Offset(-1, -1),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        SizedBox(height: 10),
+                        ColorBtn(
+                          text:
+                              'Tiempo recomendado de regado: $recomWaterTimeMinutes:${recomWaterTimeSeconds < 10 ? '0$recomWaterTimeSeconds' : recomWaterTimeSeconds}${recomWaterTimeMinutes < 1 ? ' seg' : ' min'}',
+                          colors: const [Colors.lightGreen, Colors.green],
+                          onTap: () {},
+                          height: 60,
+                          width: 170,
+                        ),
+                        SizedBox(height: 10),
+                        SwitchColorBtn(
+                          textTrue: 'Detener regado',
+                          textFalse: 'Iniciar regado',
+                          colorsTrue: const [Colors.red, Colors.orange],
+                          colorsFalse: const [
+                            Colors.blue,
+                            Colors.lightBlueAccent,
+                          ],
+                          state: waterOnRecom,
+                          onTap: () {
+                            if (recomWaterTimeMinutes > 0 ||
+                                recomWaterTimeSeconds > 0) {
+                              if (!waterOn) {
+                                setState(() {
+                                  waterOnRecom = true;
+                                });
+                                int time =
+                                    (60 * recomWaterTimeMinutes) +
+                                    recomWaterTimeSeconds;
+                                sendData('waterPump', time);
+                                Timer(Duration(seconds: time), () {
+                                  setState(() {
+                                    waterOnRecom = false;
+                                  });
+                                });
+                              } else {
+                                setState(() {
+                                  waterOnRecom = false;
+                                });
+                                sendData('waterPump', false);
+                              }
+                            } else {
+                              showErrorMesage(
+                                context,
+                                'Ups...',
+                                'Ingresa un tiempo mayor a cero.',
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    height: size.height * 0.18,
+                    width: size.width * 0.45,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      borderRadius: BorderRadius.all(Radius.circular(20)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withValues(),
+                          spreadRadius: 1,
+                          blurRadius: 10,
+                          offset: Offset(10, 5),
+                        ),
+                        BoxShadow(
+                          color: Colors.white.withValues(),
+                          blurRadius: 50,
+                          offset: Offset(-1, -1),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        SizedBox(height: 10),
+                        ColorBtn(
+                          text:
+                              'Tiempo recomendado de ventilación: $recomFanTimeMinutes:${recomFanTimeSeconds < 10 ? '0$recomFanTimeSeconds' : recomFanTimeSeconds}${recomFanTimeMinutes < 1 ? ' seg' : ' min'}',
+                          colors: const [Colors.lightGreen, Colors.green],
+                          onTap: () {},
+                          height: 60,
+                          width: 170,
+                        ),
+                        SizedBox(height: 10),
+                        SwitchColorBtn(
+                          textTrue: 'Detener ventiladores',
+                          textFalse: 'Encender ventiladores',
+                          colorsTrue: const [Colors.red, Colors.orange],
+                          colorsFalse: const [
+                            Colors.blue,
+                            Colors.lightBlueAccent,
+                          ],
+                          state: fanOnRecom,
+                          onTap: () {
+                            if (recomFanTimeMinutes > 0 ||
+                                recomFanTimeSeconds > 0) {
+                              if (!waterOn) {
+                                setState(() {
+                                  fanOnRecom = true;
+                                });
+                                int time =
+                                    (60 * recomFanTimeMinutes) +
+                                    recomFanTimeSeconds;
+                                sendData('fan', time);
+                                Timer(Duration(seconds: time), () {
+                                  setState(() {
+                                    fanOnRecom = false;
+                                  });
+                                });
+                              } else {
+                                setState(() {
+                                  fanOnRecom = false;
+                                });
+                                sendData('fan', false);
+                              }
+                            } else {
+                              showErrorMesage(
+                                context,
+                                'Ups...',
+                                'Ingresa un tiempo mayor a cero.',
+                              );
+                            }
+                          },
                         ),
                       ],
                     ),
@@ -746,16 +961,16 @@ class _BluPageState extends State<BluPage> {
                       },
                       calendarBuilders: CalendarBuilders(
                         defaultBuilder: (context, day, focusedDay) {
-                          if (day.weekday == DateTime.monday && waterDays[0] ||
-                              day.weekday == DateTime.tuesday && waterDays[1] ||
+                          if (day.weekday == DateTime.sunday && waterDays[0] ||
+                              day.weekday == DateTime.monday && waterDays[1] ||
+                              day.weekday == DateTime.tuesday && waterDays[2] ||
                               day.weekday == DateTime.wednesday &&
-                                  waterDays[2] ||
-                              day.weekday == DateTime.thursday &&
                                   waterDays[3] ||
-                              day.weekday == DateTime.friday && waterDays[4] ||
+                              day.weekday == DateTime.thursday &&
+                                  waterDays[4] ||
+                              day.weekday == DateTime.friday && waterDays[5] ||
                               day.weekday == DateTime.saturday &&
-                                  waterDays[5] ||
-                              day.weekday == DateTime.sunday && waterDays[6]) {
+                                  waterDays[6]) {
                             return Container(
                               margin: const EdgeInsets.all(6.0),
                               decoration: BoxDecoration(
@@ -1141,15 +1356,16 @@ class _BluPageState extends State<BluPage> {
                         }
                         String msg = String.fromCharCodes(value);
                         Map<String, dynamic> json = jsonDecode(msg);
+                        print(msg);
 
                         if (mounted) {
                           setState(() {
                             if (json['humidity'] < 40) {
-                              waterMinutes = 1;
+                              recomWaterTimeMinutes = 1;
                             } else if (json['humidity'] < 60) {
-                              waterSeconds = 30;
+                              recomFanTimeSeconds = 30;
                             } else {
-                              waterMinutes = 2;
+                              recomWaterTimeMinutes = 2;
                             }
 
                             if (json['temperature'] > 30) {
@@ -1161,7 +1377,9 @@ class _BluPageState extends State<BluPage> {
                               temperatureSpot = 2.5;
                             }
 
-                            humidity = json['humidity'].toString();
+                            humidity = json['humidity'] != null
+                                ? json['humidity'].toString()
+                                : "1";
                             humiditySpot = double.parse(humidity);
                             temperature = json['temperature'].toString();
                             dirtHumidity = json['dirt_humidity'].toString();
@@ -1169,7 +1387,8 @@ class _BluPageState extends State<BluPage> {
                             minHumidity = json['minHumidity'];
                             maxTemperature = json['maxTemperature'];
                             waterDays = List<bool>.from(json['water_days']);
-                            waterRemaining = json['waterRemaining'];
+                            waterRemaining = (json['waterRemaining'] ?? 0)
+                                .toDouble();
                             nextWaterDay = getNextWateringDate(waterDays);
                           });
                         }

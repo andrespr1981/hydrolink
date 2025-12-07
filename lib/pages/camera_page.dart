@@ -162,6 +162,11 @@ class _CameraPageState extends State<CameraPage> {
                   ),
                   child: Column(
                     children: [
+                      SizedBox(height: 10),
+                      Text(
+                        'EN VIVO',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       Padding(
                         padding: EdgeInsetsGeometry.only(top: 16.0),
                         child: Mjpeg(
@@ -235,7 +240,10 @@ class _CameraPageState extends State<CameraPage> {
                   child: Column(
                     children: [
                       SizedBox(height: 20),
-                      Text('Galeria'),
+                      Text(
+                        'GALERIA',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       SizedBox(height: 20),
                       readPhotosPermission
                           ? SizedBox(

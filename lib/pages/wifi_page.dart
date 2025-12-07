@@ -27,23 +27,32 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   int graphicSelected = 0;
-  bool waterOn = false;
-  double waterRemaining = 0;
 
   final List<String> days = [
+    'Domingo',
     'Lunes',
     'Martes',
     'Miercoles',
     'Jueves',
     'Viernes',
     'Sabado',
-    'Domingo',
   ];
 
   List<bool> waterDays = [false, false, false, false, false, false, false];
 
+  bool waterOn = false;
+  double waterRemaining = 0;
   late int waterMinutes = 0;
   late int waterSeconds = 0;
+
+  bool waterOnRecom = false;
+  bool fanOnRecom = false;
+
+  late int recomWaterTimeMinutes = 0;
+  late int recomWaterTimeSeconds = 0;
+
+  late int recomFanTimeMinutes = 0;
+  late int recomFanTimeSeconds = 0;
 
   late int fanMinutes = 0;
   late int fanSeconds = 0;
@@ -84,11 +93,11 @@ class _HomePageState extends State<HomePage> {
       if (mounted) {
         setState(() {
           if (json['humidity'] < 40) {
-            waterMinutes = 1;
+            recomWaterTimeMinutes = 1;
           } else if (json['humidity'] < 60) {
-            waterSeconds = 30;
+            recomFanTimeSeconds = 30;
           } else {
-            waterMinutes = 2;
+            recomWaterTimeMinutes = 2;
           }
 
           if (json['temperature'] > 30) {
@@ -106,7 +115,7 @@ class _HomePageState extends State<HomePage> {
           light = json['light'].toString();
           minHumidity = json['minHumidity'];
           maxTemperature = json['maxTemperature'];
-          waterRemaining = json['waterRemaining'];
+          waterRemaining = (json['waterRemaining'] ?? 0).toDouble();
           waterDays = List<bool>.from(json['water_days']);
         });
         addGrapithData();
@@ -217,19 +226,11 @@ class _HomePageState extends State<HomePage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              'Produccion: 00 dias',
-                              textAlign: TextAlign.center,
-                            ),
-                            Text(
                               'Floracion: 00 dias',
                               textAlign: TextAlign.center,
                             ),
                             Text(
                               'Desarrollo: 00 dias',
-                              textAlign: TextAlign.center,
-                            ),
-                            Text(
-                              'Germinacion: 00 dias',
                               textAlign: TextAlign.center,
                             ),
                             Text(
@@ -359,7 +360,10 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('AGUA RESTANTE'),
+                        Text(
+                          'AGUA RESTANTE',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         SizedBox(
                           height: 100,
                           width: 100,
@@ -497,7 +501,10 @@ class _HomePageState extends State<HomePage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text('TEMPERATURA'),
+                        Text(
+                          'TEMPERATURA',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                         fanOn
                             ? FanProgressIndicator(progress: 1)
                             : Image.asset('assets/fan.png', height: 100),
@@ -601,6 +608,166 @@ class _HomePageState extends State<HomePage> {
                 ],
               ),
               SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    height: size.height * 0.18,
+                    width: size.width * 0.45,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      borderRadius: BorderRadius.all(Radius.circular(20)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withValues(),
+                          spreadRadius: 1,
+                          blurRadius: 10,
+                          offset: Offset(10, 5),
+                        ),
+                        BoxShadow(
+                          color: Colors.white.withValues(),
+                          blurRadius: 50,
+                          offset: Offset(-1, -1),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        SizedBox(height: 10),
+                        ColorBtn(
+                          text:
+                              'Tiempo recomendado de regado: $recomWaterTimeMinutes:${recomWaterTimeSeconds < 10 ? '0$recomWaterTimeSeconds' : recomWaterTimeSeconds}${recomWaterTimeMinutes < 1 ? ' seg' : ' min'}',
+                          colors: const [Colors.lightGreen, Colors.green],
+                          onTap: () {},
+                          height: 60,
+                          width: 170,
+                        ),
+                        SizedBox(height: 10),
+                        SwitchColorBtn(
+                          textTrue: 'Detener regado',
+                          textFalse: 'Iniciar regado',
+                          colorsTrue: const [Colors.red, Colors.orange],
+                          colorsFalse: const [
+                            Colors.blue,
+                            Colors.lightBlueAccent,
+                          ],
+                          state: waterOnRecom,
+                          onTap: () {
+                            if (recomWaterTimeMinutes > 0 ||
+                                recomWaterTimeSeconds > 0) {
+                              if (!waterOn) {
+                                setState(() {
+                                  waterOnRecom = true;
+                                });
+                                int time =
+                                    (60 * recomWaterTimeMinutes) +
+                                    recomWaterTimeSeconds;
+                                mqtt.publishJson(topicEntry, {
+                                  "waterPump": time,
+                                });
+                                Timer(Duration(seconds: time), () {
+                                  setState(() {
+                                    waterOnRecom = false;
+                                  });
+                                });
+                              } else {
+                                setState(() {
+                                  waterOnRecom = false;
+                                });
+                                mqtt.publishJson(topicEntry, {
+                                  "waterPump": false,
+                                });
+                              }
+                            } else {
+                              showErrorMesage(
+                                context,
+                                'Ups...',
+                                'Ingresa un tiempo mayor a cero.',
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    height: size.height * 0.18,
+                    width: size.width * 0.45,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                      borderRadius: BorderRadius.all(Radius.circular(20)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withValues(),
+                          spreadRadius: 1,
+                          blurRadius: 10,
+                          offset: Offset(10, 5),
+                        ),
+                        BoxShadow(
+                          color: Colors.white.withValues(),
+                          blurRadius: 50,
+                          offset: Offset(-1, -1),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        SizedBox(height: 10),
+                        ColorBtn(
+                          text:
+                              'Tiempo recomendado de ventilación: $recomFanTimeMinutes:${recomFanTimeSeconds < 10 ? '0$recomFanTimeSeconds' : recomFanTimeSeconds}${recomFanTimeMinutes < 1 ? ' seg' : ' min'}',
+                          colors: const [Colors.lightGreen, Colors.green],
+                          onTap: () {},
+                          height: 60,
+                          width: 170,
+                        ),
+                        SizedBox(height: 10),
+                        SwitchColorBtn(
+                          textTrue: 'Detener ventiladores',
+                          textFalse: 'Encender ventiladores',
+                          colorsTrue: const [Colors.red, Colors.orange],
+                          colorsFalse: const [
+                            Colors.blue,
+                            Colors.lightBlueAccent,
+                          ],
+                          state: fanOnRecom,
+                          onTap: () {
+                            if (recomFanTimeMinutes > 0 ||
+                                recomFanTimeSeconds > 0) {
+                              if (!waterOn) {
+                                setState(() {
+                                  fanOnRecom = true;
+                                });
+                                int time =
+                                    (60 * recomFanTimeMinutes) +
+                                    recomFanTimeSeconds;
+                                mqtt.publishJson(topicEntry, {"fan": time});
+                                Timer(Duration(seconds: time), () {
+                                  setState(() {
+                                    fanOnRecom = false;
+                                  });
+                                });
+                              } else {
+                                setState(() {
+                                  fanOnRecom = false;
+                                });
+                                mqtt.publishJson(topicEntry, {"fan": false});
+                              }
+                            } else {
+                              showErrorMesage(
+                                context,
+                                'Ups...',
+                                'Ingresa un tiempo mayor a cero.',
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 20),
               Container(
                 height: size.height * 0.57,
                 width: size.width,
@@ -636,16 +803,16 @@ class _HomePageState extends State<HomePage> {
                       },
                       calendarBuilders: CalendarBuilders(
                         defaultBuilder: (context, day, focusedDay) {
-                          if (day.weekday == DateTime.monday && waterDays[0] ||
-                              day.weekday == DateTime.tuesday && waterDays[1] ||
+                          if (day.weekday == DateTime.sunday && waterDays[0] ||
+                              day.weekday == DateTime.monday && waterDays[1] ||
+                              day.weekday == DateTime.tuesday && waterDays[2] ||
                               day.weekday == DateTime.wednesday &&
-                                  waterDays[2] ||
-                              day.weekday == DateTime.thursday &&
                                   waterDays[3] ||
-                              day.weekday == DateTime.friday && waterDays[4] ||
+                              day.weekday == DateTime.thursday &&
+                                  waterDays[4] ||
+                              day.weekday == DateTime.friday && waterDays[5] ||
                               day.weekday == DateTime.saturday &&
-                                  waterDays[5] ||
-                              day.weekday == DateTime.sunday && waterDays[6]) {
+                                  waterDays[6]) {
                             return Container(
                               margin: const EdgeInsets.all(6.0),
                               decoration: BoxDecoration(
@@ -829,7 +996,7 @@ class _HomePageState extends State<HomePage> {
                       const Color.fromARGB(255, 56, 165, 255),
                       Colors.blue,
                     ],
-                    pointsList: humiditySpots,
+                    pointsList: [FlSpot(humiditySpot, 0.5)],
                   ),
                 ),
               ],
@@ -896,7 +1063,12 @@ class _HomePageState extends State<HomePage> {
                   Color(0xFF4682B4),
                   Color(0xFF0000FF),
                 ],
-                pointsList: lightSpots,
+                pointsList: [
+                  FlSpot(
+                    light == "0" ? 5.5 : (double.parse(light) / 10) * 10,
+                    0.5,
+                  ),
+                ],
               ),
             ),
           ],
@@ -940,7 +1112,14 @@ class _HomePageState extends State<HomePage> {
                   const Color.fromARGB(255, 56, 165, 255),
                   Colors.blue,
                 ],
-                pointsList: dirtHumiditySpots,
+                pointsList: [
+                  FlSpot(
+                    dirtHumidity == "0"
+                        ? 5.5
+                        : (double.parse(dirtHumidity) / 4095) * 10,
+                    0.5,
+                  ),
+                ],
               ),
             ),
           ],
@@ -986,9 +1165,9 @@ class _HomePageState extends State<HomePage> {
                       Color(0xFFFFFF00),
                       Color(0xFFFFA500),
                       Color(0xFFFF4500),
-                      Color(0xFFFF0000), //
+                      Color(0xFFFF0000),
                     ],
-                    pointsList: temperatureSpots,
+                    pointsList: [FlSpot(temperatureSpot, 0.5)],
                   ),
                 ),
               ],
